@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CoordX Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --bg:#101316;
+    --panel:#1a1e22;
+    --panel-2:#20252a;
+    --border:#2b3138;
+    --text:#e8eaec;
+    --text-dim:#8b929b;
+    --amber:#f2b705;
+    --orange:#e0641e;
+    --red:#ff5a5f;
+    --green:#38d996;
+    --mono:'IBM Plex Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 32px);
+  }
+  .app{display:flex;flex-direction:column;height:100vh;}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#15181b,#121417);flex-wrap:wrap;gap:10px;}
+  .brand{display:flex;flex-direction:column;}
+  .wordmark{font-family:var(--mono);font-weight:700;font-size:20px;letter-spacing:3px;}
+  .wordmark span{color:var(--amber);}
+  .tagline{font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-top:2px;}
+
+  .steps{display:flex;gap:6px;flex-wrap:wrap;}
+  .step-pill{font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:3px;border:1px solid var(--border);color:var(--text-dim);background:var(--panel);}
+  .step-pill.active{border-color:var(--amber);color:var(--amber);}
+  .step-pill.done{color:var(--green);border-color:var(--green);}
+
+  .topbar-right{display:flex;align-items:center;gap:10px;}
+  .tier-pill{font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--panel);white-space:nowrap;}
+  .tier-pill.warn{border-color:var(--red);color:var(--red);}
+
+  .main{display:flex;flex:1;min-height:0;}
+
+  .sidebar{width:310px;flex-shrink:0;border-right:1px solid var(--border);background:var(--panel);padding:18px;overflow-y:auto;}
+  .sidebar h3{font-family:var(--mono);font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);margin:0 0 12px;}
+  .hint{font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;}
+
+  .stage{flex:1;display:flex;flex-direction:column;padding:20px;overflow:hidden;position:relative;min-height:0;}
+  .view-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-shrink:0;}
+  .view-toolbar .hint{margin:0;flex:1;text-align:right;}
+  #zoomLabel{font-family:var(--mono);font-size:12px;color:var(--text-dim);min-width:46px;}
+  .canvas-viewport{flex:1;min-height:0;position:relative;overflow:hidden;background:#0c0e10;border:1px solid var(--border);box-shadow:0 20px 50px rgba(0,0,0,0.5);}
+  .canvas-wrap{position:absolute;top:0;left:0;transform-origin:0 0;}
+  #pdfCanvas{display:block;background:#fff;}
+  #overlay{position:absolute;top:0;left:0;}
+
+  .render-indicator{
+    position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:7px;
+    background:rgba(13,15,17,0.88);border:1px solid var(--border);color:var(--text-dim);
+    font-family:var(--mono);font-size:11px;letter-spacing:.5px;padding:6px 11px;border-radius:20px;
+    opacity:0;pointer-events:none;transition:opacity .15s ease;
+  }
+  .render-indicator.visible{opacity:1;}
+  .render-indicator .spin{
+    width:10px;height:10px;border-radius:50%;border:2px solid var(--border);
+    border-top-color:var(--amber);animation:spin .7s linear infinite;flex-shrink:0;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .readout{margin-top:12px;flex-shrink:0;align-self:flex-start;font-family:var(--mono);font-size:13px;background:#0d0f11;border:1px solid var(--border);color:var(--green);padding:8px 18px;border-radius:4px;letter-spacing:1px;}
+
+  .empty-stage{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-dim);text-align:center;}
+  .empty-stage .icon{font-size:40px;margin-bottom:14px;opacity:.5;}
+
+  .btn{font-family:var(--sans);font-weight:600;font-size:13px;padding:9px 16px;border-radius:5px;border:1px solid var(--amber);background:var(--amber);color:#141414;cursor:pointer;}
+  .btn.secondary{background:transparent;color:var(--text);border-color:var(--border);}
+  .btn.block{width:100%;margin-top:6px;}
+  .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .btn:not(:disabled):hover{filter:brightness(1.08);}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:1px;}
+  .field input[type=text],.field input[type=number],.field select{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:8px 10px;border-radius:4px;font-family:var(--sans);font-size:13px;
+  }
+
+  .radio-row{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;}
+  .radio-row.selected{border-color:var(--amber);background:rgba(242,183,5,0.08);}
+  .radio-row input{margin-top:3px;}
+  .radio-row .rlabel{font-size:13px;font-weight:600;}
+  .radio-row .rsub{font-size:11px;color:var(--text-dim);margin-top:2px;}
+
+  .point-row{border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:8px;background:var(--panel-2);}
+  .point-row-head{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:6px;}
+  .point-row input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:12px;padding:4px 0;margin-bottom:5px;font-family:var(--sans);}
+  .point-row input:focus{outline:none;border-bottom-color:var(--amber);}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;}
+  .coords-tag{font-family:var(--mono);font-size:10px;color:var(--green);}
+
+  .progress-bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;margin:10px 0 4px;}
+  .progress-bar-fill{height:100%;background:var(--amber);transition:width .2s;}
+  .progress-bar-fill.full{background:var(--red);}
+
+  .upsell{margin-top:10px;padding:10px 12px;border:1px dashed var(--orange);border-radius:5px;font-size:12px;color:var(--orange);line-height:1.5;}
+
+  .calib-form{background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:12px;margin-top:12px;}
+  .two-col{display:flex;gap:10px;}
+  .two-col .field{flex:1;}
+
+  select{width:100%;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="wordmark">COORD<span>X</span></div>
+      <div class="tagline">PDF &rarr; field-ready points</div>
+    </div>
+    <div class="steps" id="stepIndicator"></div>
+    <div class="topbar-right">
+      <div class="tier-pill" id="tierPill">0 / 50 free points</div>
+      <button class="btn secondary" onclick="resetApp()">Start over</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar" id="sidebar"></div>
+
+    <div class="stage">
+      <div class="view-toolbar" id="viewToolbar" style="display:none;">
+        <span id="zoomLabel">100%</span>
+        <button class="btn secondary" onclick="fitToView()">Fit</button>
+        <div class="hint">Right-click + drag to pan &middot; Scroll to zoom</div>
+      </div>
+      <div class="canvas-viewport" id="canvasViewport" style="display:none;">
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="pdfCanvas"></canvas>
+          <svg id="overlay"></svg>
+        </div>
+        <div class="render-indicator" id="renderIndicator"><span class="spin"></span>Sharpening</div>
+      </div>
+      <div class="readout" id="readout" style="display:none;">&#8853; X: 0.00 ft &nbsp;&nbsp; Y: 0.00 ft</div>
+      <div class="empty-stage" id="emptyStage">
+        <div class="icon">&#9634;</div>
+        <div>Upload a PDF to see it rendered here</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const SCALE_PRESETS = [
+  {label:'1/16" = 1\'-0"', ftPerInch:16},
+  {label:'1/8" = 1\'-0"', ftPerInch:8},
+  {label:'3/16" = 1\'-0"', ftPerInch:5.333},
+  {label:'1/4" = 1\'-0"', ftPerInch:4},
+  {label:'3/8" = 1\'-0"', ftPerInch:2.667},
+  {label:'1/2" = 1\'-0"', ftPerInch:2},
+  {label:'3/4" = 1\'-0"', ftPerInch:1.333},
+  {label:'1" = 1\'-0"', ftPerInch:1},
+  {label:'1" = 10\'', ftPerInch:10},
+  {label:'1" = 20\'', ftPerInch:20},
+  {label:'1" = 30\'', ftPerInch:30},
+  {label:'1" = 40\'', ftPerInch:40},
+  {label:'1" = 50\'', ftPerInch:50},
+  {label:'1" = 100\'', ftPerInch:100},
+];
+
+const FREE_LIMIT = 50;
+
+let state = {
+  step: 'upload',
+  coordSystem: null,
+  scaleSubMode: null, // 'preset' | 'distance'
+  calibClicks: [],
+  transform: null,
+  renderScale: 1,
+  pageWidthPx: 0,
+  pageHeightPx: 0,
+  points: [],
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+  isPanning: false,
+  panStartX: 0, panStartY: 0,
+  panStartOffX: 0, panStartOffY: 0,
+  pdfPage: null,
+  baseScale: 1,
+  currentMultiplier: 0,
+  currentRenderTask: null,
+};
+
+const $ = (sel) => document.querySelector(sel);
+const svgNS = 'http://www.w3.org/2000/svg';
+let uidCounter = 1;
+
+function resetApp(){ location.reload(); }
+
+// ---------- complex helpers for 2-point similarity transform ----------
+function cSub(a,b){ return {re:a.re-b.re, im:a.im-b.im}; }
+function cMul(a,b){ return {re:a.re*b.re-a.im*b.im, im:a.re*b.im+a.im*b.re}; }
+function cDiv(a,b){ const d=b.re*b.re+b.im*b.im; return {re:(a.re*b.re+a.im*b.im)/d, im:(a.im*b.re-a.re*b.im)/d}; }
+function cAdd(a,b){ return {re:a.re+b.re, im:a.im+b.im}; }
+
+// ---------- step indicator ----------
+function stepList(){
+  const base = ['upload','coordsys'];
+  base.push(state.coordSystem === 'none' ? 'scale' : 'calibrate');
+  base.push('place');
+  return base;
+}
+const STEP_LABELS = {upload:'Upload', coordsys:'Coord. System', scale:'Scale', calibrate:'Calibrate', place:'Place Points'};
+
+function renderStepIndicator(){
+  const steps = stepList();
+  const curIdx = steps.indexOf(state.step);
+  $('#stepIndicator').innerHTML = steps.map((s,i)=>{
+    let cls = 'step-pill';
+    if(i < curIdx) cls += ' done';
+    if(i === curIdx) cls += ' active';
+    return `<div class="${cls}">${i+1}. ${STEP_LABELS[s]}</div>`;
+  }).join('');
+}
+
+function renderTierPill(){
+  const n = state.points.length;
+  const pill = $('#tierPill');
+  pill.textContent = `${n} / ${FREE_LIMIT} free points`;
+  pill.classList.toggle('warn', n >= FREE_LIMIT);
+}
+
+// ---------- routing ----------
+function goToStep(step){
+  state.step = step;
+  renderStepIndicator();
+  renderSidebar();
+  updateOverlayCursorMode();
+}
+
+// ---------- sidebar per step ----------
+function renderSidebar(){
+  const el = $('#sidebar');
+  if(state.step === 'upload') el.innerHTML = uploadPanel();
+  else if(state.step === 'coordsys') el.innerHTML = coordSysPanel();
+  else if(state.step === 'scale') el.innerHTML = scalePanel();
+  else if(state.step === 'calibrate') el.innerHTML = calibratePanel();
+  else if(state.step === 'place') el.innerHTML = placePanel();
+}
+
+function uploadPanel(){
+  return `
+    <h3>01 &middot; Upload</h3>
+    <div class="hint">Drop in a site/floor plan PDF. This prototype renders the first page only.</div>
+    <input type="file" accept="application/pdf" id="fileInput" style="color:var(--text-dim); font-size:12px;">
+  `;
+}
+
+function coordSysPanel(){
+  const options = [
+    {v:'none', l:'None', s:"Zero point at the drawing's bottom-left corner"},
+    {v:'project', l:'Project / Local', s:'Two-point calibration to a local system'},
+    {v:'stateplane', l:'State Plane', s:'Two-point calibration to known SP coordinates'},
+    {v:'assumed', l:'Assumed', s:'Two-point calibration to assumed coordinates'},
+    {v:'grid', l:'Grid', s:'Two-point calibration to grid coordinates'},
+  ];
+  return `
+    <h3>02 &middot; Coordinate System</h3>
+    <div class="hint">Everything except "None" uses the same move: click two reference points on the drawing and tell CoordX their real-world X/Y &mdash; that single step sets scale, rotation, and origin together.</div>
+    ${options.map(o=>`
+      <label class="radio-row" onclick="selectCoordSys('${o.v}')">
+        <input type="radio" name="coordsys" value="${o.v}">
+        <div><div class="rlabel">${o.l}</div><div class="rsub">${o.s}</div></div>
+      </label>
+    `).join('')}
+    <button class="btn block" id="coordsysContinue" disabled onclick="continueFromCoordSys()">Continue</button>
+  `;
+}
+
+function selectCoordSys(v){
+  state.coordSystem = v;
+  document.querySelectorAll('.radio-row').forEach(r=>r.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  event.currentTarget.querySelector('input').checked = true;
+  $('#coordsysContinue').disabled = false;
+}
+
+function continueFromCoordSys(){
+  state.calibClicks = [];
+  clearCalibMarkers();
+  if(state.coordSystem === 'none') goToStep('scale');
+  else goToStep('calibrate');
+}
+
+function scalePanel(){
+  return `
+    <h3>03 &middot; Scale</h3>
+    <div class="hint">No coordinate system chosen, so CoordX just needs a real-world scale. Origin will be the bottom-left corner of the drawing.</div>
+
+    <div class="field">
+      <label>Known scale preset</label>
+      <select id="presetSelect">
+        <option value="">Choose a scale&hellip;</option>
+        ${SCALE_PRESETS.map((p,i)=>`<option value="${i}">${p.label}</option>`).join('')}
+      </select>
+    </div>
+    <button class="btn block" onclick="applyPresetScale()">Use this scale</button>
+
+    <div style="text-align:center;color:var(--text-dim);font-size:11px;margin:16px 0;">&mdash; or &mdash;</div>
+
+    <button class="btn secondary block" onclick="startDistanceCalibration()">Calibrate by clicking two points</button>
+  `;
+}
+
+function applyPresetScale(){
+  const idx = $('#presetSelect').value;
+  if(idx === '') return;
+  const preset = SCALE_PRESETS[idx];
+  const ftPerCanvasPx = preset.ftPerInch / (state.renderScale * 72);
+  setUniformTransform(ftPerCanvasPx);
+  goToStep('place');
+}
+
+function startDistanceCalibration(){
+  state.scaleSubMode = 'distance';
+  state.calibClicks = [];
+  clearCalibMarkers();
+  goToStep('calibrate');
+}
+
+function calibratePanel(){
+  const n = state.calibClicks.length;
+  const distanceMode = state.coordSystem === 'none';
+  let body = '';
+  if(n < 2){
+    body = `<div class="hint">Click point <strong>${n===0?'A':'B'}</strong> on the drawing.</div>`;
+  } else {
+    body = distanceMode ? `
+      <div class="calib-form">
+        <div class="field">
+          <label>Real distance between A &amp; B (ft)</label>
+          <input type="number" id="calibDist" step="any" placeholder="e.g. 42.5">
+        </div>
+        <button class="btn block" onclick="submitDistanceCalibration()">Set scale</button>
+      </div>
+    ` : `
+      <div class="calib-form">
+        <div class="hint" style="margin-bottom:10px;">Point A</div>
+        <div class="two-col">
+          <div class="field"><label>X (ft)</label><input type="number" step="any" id="ax"></div>
+          <div class="field"><label>Y (ft)</label><input type="number" step="any" id="ay"></div>
+        </div>
+        <div class="hint" style="margin:10px 0;">Point B</div>
+        <div class="two-col">
+          <div class="field"><label>X (ft)</label><input type="number" step="any" id="bx"></div>
+          <div class="field"><label>Y (ft)</label><input type="number" step="any" id="by"></div>
+        </div>
+        <button class="btn block" onclick="submitGeoreference()">Set coordinates</button>
+      </div>
+    `;
+  }
+  return `
+    <h3>03 &middot; Calibrate</h3>
+    <div class="hint">${distanceMode ? 'Click two points a known distance apart.' : 'Click two reference points, then enter their real-world coordinates.'}</div>
+    ${body}
+    <button class="btn secondary block" onclick="state.calibClicks=[]; clearCalibMarkers(); renderSidebar();">Reset clicks</button>
+  `;
+}
+
+function submitDistanceCalibration(){
+  const dist = parseFloat($('#calibDist').value);
+  if(!dist || dist <= 0) return;
+  const [a,b] = state.calibClicks;
+  const pxDist = Math.hypot(b.x-a.x, b.y-a.y);
+  const ftPerCanvasPx = dist / pxDist;
+  setUniformTransform(ftPerCanvasPx);
+  goToStep('place');
+}
+
+function submitGeoreference(){
+  const X1=parseFloat($('#ax').value), Y1=parseFloat($('#ay').value);
+  const X2=parseFloat($('#bx').value), Y2=parseFloat($('#by').value);
+  if([X1,Y1,X2,Y2].some(v=>isNaN(v))) return;
+  const [a,b] = state.calibClicks;
+  const m1 = {re:a.x, im: state.pageHeightPx - a.y};
+  const m2 = {re:b.x, im: state.pageHeightPx - b.y};
+  const C1 = {re:X1, im:Y1};
+  const C2 = {re:X2, im:Y2};
+  const k = cDiv(cSub(C2,C1), cSub(m2,m1));
+  const t = cSub(C1, cMul(k, m1));
+  state.transform = (cx,cy) => {
+    const m = {re:cx, im: state.pageHeightPx - cy};
+    const r = cAdd(cMul(k,m), t);
+    return {x:r.re, y:r.im};
+  };
+  goToStep('place');
+}
+
+function setUniformTransform(ftPerCanvasPx){
+  state.transform = (cx,cy) => ({
+    x: cx * ftPerCanvasPx,
+    y: (state.pageHeightPx - cy) * ftPerCanvasPx,
+  });
+}
+
+function placePanel(){
+  const n = state.points.length;
+  const pct = Math.min(100, (n/FREE_LIMIT)*100);
+  const rows = state.points.map((p,i)=>`
+    <div class="point-row">
+      <div class="point-row-head">
+        <span>#${i+1} &middot; <span class="coords-tag">${p.x.toFixed(2)}, ${p.y.toFixed(2)} ft</span></span>
+        <button class="del-btn" onclick="deletePoint('${p.id}')">remove</button>
+      </div>
+      <input type="text" value="${p.name}" placeholder="Name" oninput="updatePoint('${p.id}','name',this.value)">
+      <input type="text" value="${p.desc}" placeholder="Description" oninput="updatePoint('${p.id}','desc',this.value)">
+      <input type="text" value="${p.layer}" placeholder="Layer" oninput="updatePoint('${p.id}','layer',this.value)">
+    </div>
+  `).join('');
+  return `
+    <h3>04 &middot; Place Points</h3>
+    <div class="hint">Click anywhere on the drawing to drop a point.</div>
+    <div class="progress-bar"><div class="progress-bar-fill ${n>=FREE_LIMIT?'full':''}" style="width:${pct}%"></div></div>
+    ${n>=FREE_LIMIT ? `<div class="upsell">Free limit reached (50 points). CoordX Pro unlocks unlimited points &mdash; starting at $2.99/mo.</div>` : ''}
+    <button class="btn block" ${n===0?'disabled':''} onclick="exportCsv()">Export CSV (${n} point${n===1?'':'s'})</button>
+    <div style="margin-top:16px;">${rows || '<div class="hint">No points placed yet.</div>'}</div>
+  `;
+}
+
+function updatePoint(id, field, value){
+  const p = state.points.find(p=>p.id===id);
+  if(!p) return;
+  p[field] = value;
+  if(field === 'name'){
+    const label = document.querySelector(`text[data-label-for="${id}"]`);
+    if(label) label.textContent = value;
+  }
+}
+
+function deletePoint(id){
+  state.points = state.points.filter(p=>p.id!==id);
+  const marker = document.querySelector(`g[data-marker-for="${id}"]`);
+  if(marker) marker.remove();
+  renderTierPill();
+  renderSidebar();
+}
+
+// ---------- CSV export ----------
+function exportCsv(){
+  const header = ['NAME','X(ft)','Y(ft)','Z(ft)','DESC','LAYER',
+    'ATTRIBUTE1 NAME','ATTRIBUTE1 VALUE','ATTRIBUTE2 NAME','ATTRIBUTE2 VALUE',
+    'ATTRIBUTE3 NAME','ATTRIBUTE3 VALUE','ATTRIBUTE4 NAME','ATTRIBUTE4 VALUE',
+    'ATTRIBUTE5 NAME','ATTRIBUTE5 VALUE'];
+  const rows = state.points.map(p => [
+    p.name, p.x.toFixed(3), p.y.toFixed(3), '0.000', p.desc, p.layer,
+    '','','','','','','','','',''
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'coordx-points.csv';
+  a.click();
+}
+
+// ---------- PDF handling ----------
+document.body.addEventListener('change', (e)=>{
+  if(e.target.id === 'fileInput'){
+    const file = e.target.files[0];
+    if(file) loadPdf(file);
+  }
+});
+
+async function loadPdf(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const page = await pdf.getPage(1);
+  const base = page.getViewport({scale:1});
+  const targetWidth = 1400; // logical/CSS size — every coordinate calc & overlay in the app is built on this and never changes
+  const baseScale = targetWidth / base.width;
+  const logicalViewport = page.getViewport({scale: baseScale});
+
+  state.pdfPage = page;
+  state.baseScale = baseScale;
+  state.renderScale = baseScale;
+  state.pageWidthPx = logicalViewport.width;
+  state.pageHeightPx = logicalViewport.height;
+  state.currentMultiplier = 0;
+
+  const overlay = $('#overlay');
+  overlay.setAttribute('width', logicalViewport.width);
+  overlay.setAttribute('height', logicalViewport.height);
+  overlay.setAttribute('viewBox', `0 0 ${logicalViewport.width} ${logicalViewport.height}`);
+  overlay.style.width = logicalViewport.width + 'px';
+  overlay.style.height = logicalViewport.height + 'px';
+  overlay.innerHTML = '';
+
+  await rerenderAtQuality(1); // initial crisp pass, accounts for device pixel ratio
+
+  $('#canvasViewport').style.display = 'block';
+  $('#viewToolbar').style.display = 'flex';
+  $('#readout').style.display = 'block';
+  $('#emptyStage').style.display = 'none';
+
+  requestAnimationFrame(fitToView);
+  goToStep('coordsys');
+}
+
+// Re-rasterizes the PDF page at a resolution matched to the current zoom level —
+// this is the actual "why Revu stays crisp" trick: redraw the vector source sharper
+// instead of stretching a fixed bitmap. Canvas's CSS size (pageWidthPx/pageHeightPx)
+// never changes, so nothing downstream (overlay, point math) is affected — only the
+// pixel density of what's drawn into it.
+let renderDebounceTimer = null;
+function scheduleQualityRerender(){
+  clearTimeout(renderDebounceTimer);
+  renderDebounceTimer = setTimeout(()=> rerenderAtQuality(state.zoom), 160);
+}
+
+async function rerenderAtQuality(effectiveZoom){
+  if(!state.pdfPage) return;
+  const dpr = window.devicePixelRatio || 1;
+  const MAX_MULTIPLIER = 3; // memory/perf ceiling — see note to Robbie
+  const multiplier = Math.min(Math.max(effectiveZoom * dpr, 1), MAX_MULTIPLIER);
+  if(Math.abs(multiplier - state.currentMultiplier) < 0.05) return;
+  state.currentMultiplier = multiplier;
+
+  const viewport = state.pdfPage.getViewport({scale: state.baseScale * multiplier});
+  const canvas = $('#pdfCanvas');
+
+  if(state.currentRenderTask){
+    try{ state.currentRenderTask.cancel(); } catch(e){}
+  }
+
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  canvas.style.width = state.pageWidthPx + 'px';   // logical size stays fixed
+  canvas.style.height = state.pageHeightPx + 'px';
+
+  const ctx = canvas.getContext('2d');
+  const task = state.pdfPage.render({canvasContext: ctx, viewport});
+  state.currentRenderTask = task;
+  showRenderIndicator();
+  try{ await task.promise; } catch(e){ /* superseded by a newer render, ignore */ }
+  finally{ hideRenderIndicator(); }
+}
+
+let activeRenderCount = 0;
+function showRenderIndicator(){
+  activeRenderCount++;
+  const el = $('#renderIndicator');
+  if(el) el.classList.add('visible');
+}
+function hideRenderIndicator(){
+  activeRenderCount = Math.max(0, activeRenderCount - 1);
+  if(activeRenderCount === 0){
+    const el = $('#renderIndicator');
+    if(el) el.classList.remove('visible');
+  }
+}
+
+// ---------- overlay interaction ----------
+function getCanvasCoords(evt){
+  const vp = $('#canvasViewport');
+  const rect = vp.getBoundingClientRect();
+  const vx = evt.clientX - rect.left;
+  const vy = evt.clientY - rect.top;
+  return {
+    x: (vx - state.panX) / state.zoom,
+    y: (vy - state.panY) / state.zoom,
+  };
+}
+
+function updateOverlayCursorMode(){
+  const vp = $('#canvasViewport');
+  if(!vp) return;
+  vp.style.cursor = (state.step === 'calibrate' || state.step === 'place') ? 'crosshair' : 'default';
+}
+
+function applyViewTransform(){
+  $('#canvasWrap').style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+  const label = $('#zoomLabel');
+  if(label) label.textContent = Math.round(state.zoom*100) + '%';
+}
+
+function fitToView(){
+  const vp = $('#canvasViewport');
+  if(!vp || !state.pageWidthPx) return;
+  const vw = vp.clientWidth, vh = vp.clientHeight;
+  const scale = Math.min(vw/state.pageWidthPx, vh/state.pageHeightPx) * 0.96;
+  state.zoom = scale;
+  state.panX = (vw - state.pageWidthPx*scale)/2;
+  state.panY = (vh - state.pageHeightPx*scale)/2;
+  applyViewTransform();
+  scheduleQualityRerender();
+}
+
+function onViewportWheel(evt){
+  if(!state.pageWidthPx) return;
+  evt.preventDefault();
+  const vp = $('#canvasViewport');
+  const rect = vp.getBoundingClientRect();
+  const vx = evt.clientX - rect.left;
+  const vy = evt.clientY - rect.top;
+  const localX = (vx - state.panX) / state.zoom;
+  const localY = (vy - state.panY) / state.zoom;
+  const factor = evt.deltaY < 0 ? 1.12 : 1/1.12;
+  let newZoom = Math.max(0.1, Math.min(state.zoom * factor, 10));
+  state.panX = vx - localX * newZoom;
+  state.panY = vy - localY * newZoom;
+  state.zoom = newZoom;
+  applyViewTransform();
+  scheduleQualityRerender();
+}
+
+function onViewportMouseDown(evt){
+  if(evt.button !== 2) return; // right button only — left stays free for calibrate/place clicks
+  evt.preventDefault();
+  state.isPanning = true;
+  state.panStartX = evt.clientX;
+  state.panStartY = evt.clientY;
+  state.panStartOffX = state.panX;
+  state.panStartOffY = state.panY;
+  $('#canvasViewport').style.cursor = 'grabbing';
+}
+
+function onViewportMouseMove(evt){
+  if(!state.isPanning) return;
+  state.panX = state.panStartOffX + (evt.clientX - state.panStartX);
+  state.panY = state.panStartOffY + (evt.clientY - state.panStartY);
+  applyViewTransform();
+}
+
+function onViewportMouseUp(){
+  if(!state.isPanning) return;
+  state.isPanning = false;
+  updateOverlayCursorMode();
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const overlay = $('#overlay');
+  overlay.addEventListener('click', onOverlayClick);
+  overlay.addEventListener('mousemove', onOverlayMove);
+
+  const vp = $('#canvasViewport');
+  vp.addEventListener('contextmenu', e => e.preventDefault());
+  vp.addEventListener('mousedown', onViewportMouseDown);
+  window.addEventListener('mousemove', onViewportMouseMove);
+  window.addEventListener('mouseup', onViewportMouseUp);
+  vp.addEventListener('wheel', onViewportWheel, {passive:false});
+
+  renderStepIndicator();
+  renderSidebar();
+  renderTierPill();
+});
+
+function onOverlayClick(evt){
+  const {x,y} = getCanvasCoords(evt);
+  if(state.step === 'calibrate'){
+    if(state.calibClicks.length >= 2) return;
+    state.calibClicks.push({x,y});
+    drawCalibMarker(x,y, state.calibClicks.length===1?'A':'B');
+    renderSidebar();
+  } else if(state.step === 'place'){
+    if(state.points.length >= FREE_LIMIT){
+      renderSidebar();
+      return;
+    }
+    if(!state.transform) return;
+    const real = state.transform(x,y);
+    const pt = {
+      id: 'p'+(uidCounter++),
+      name: `P${state.points.length+1}`,
+      desc: '', layer: 'Default',
+      x: real.x, y: real.y,
+    };
+    state.points.push(pt);
+    drawPointMarker(x,y,pt);
+    renderTierPill();
+    renderSidebar();
+  }
+}
+
+function onOverlayMove(evt){
+  if(!state.pageWidthPx) return;
+  const {x,y} = getCanvasCoords(evt);
+  const readout = $('#readout');
+  if(state.transform){
+    const real = state.transform(x,y);
+    readout.innerHTML = `&#8853; X: ${real.x.toFixed(2)} ft &nbsp;&nbsp; Y: ${real.y.toFixed(2)} ft`;
+  } else {
+    readout.innerHTML = `&#8853; Calibrate to see real-world coordinates`;
+  }
+}
+
+function drawCalibMarker(x,y,label){
+  const g = document.createElementNS(svgNS,'g');
+  const c = document.createElementNS(svgNS,'circle');
+  c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r',7);
+  c.setAttribute('fill','#ff5a5f'); c.setAttribute('stroke','#fff'); c.setAttribute('stroke-width','2');
+  const t = document.createElementNS(svgNS,'text');
+  t.setAttribute('x',x+11); t.setAttribute('y',y-9);
+  t.setAttribute('fill','#ff5a5f'); t.setAttribute('font-family','IBM Plex Mono, monospace');
+  t.setAttribute('font-size','13'); t.setAttribute('font-weight','700');
+  t.textContent = label;
+  g.appendChild(c); g.appendChild(t);
+  $('#overlay').appendChild(g);
+}
+
+function clearCalibMarkers(){
+  // markers are cleared on new PDF load / re-render; for a quick reset just remove all overlay children
+  $('#overlay').innerHTML = '';
+}
+
+function drawPointMarker(x,y,pt){
+  const g = document.createElementNS(svgNS,'g');
+  g.setAttribute('data-marker-for', pt.id);
+  const tri = document.createElementNS(svgNS,'polygon');
+  const pts = `${x},${y-10} ${x-8},${y+6} ${x+8},${y+6}`;
+  tri.setAttribute('points', pts);
+  tri.setAttribute('fill', '#f2b705');
+  tri.setAttribute('stroke', '#141414');
+  tri.setAttribute('stroke-width', '1.5');
+  const dot = document.createElementNS(svgNS,'circle');
+  dot.setAttribute('cx',x); dot.setAttribute('cy',y); dot.setAttribute('r',2.5);
+  dot.setAttribute('fill','#141414');
+  const t = document.createElementNS(svgNS,'text');
+  t.setAttribute('x', x+11); t.setAttribute('y', y+4);
+  t.setAttribute('data-label-for', pt.id);
+  t.setAttribute('fill','#f2b705'); t.setAttribute('font-family','IBM Plex Mono, monospace');
+  t.setAttribute('font-size','11'); t.setAttribute('font-weight','600');
+  t.textContent = pt.name;
+  g.appendChild(tri); g.appendChild(dot); g.appendChild(t);
+  $('#overlay').appendChild(g);
+}
+</script>
+</body>
+</html>
