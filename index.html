@@ -118,6 +118,23 @@
   .two-col .field{flex:1;}
 
   select{width:100%;}
+
+  /* Consent gate above the file picker, and the persistent legal line. */
+  .consent{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:14px;}
+  .consent p{margin:0 0 9px;font-size:11.5px;line-height:1.5;color:var(--text-dim);}
+  .consent p strong{color:var(--text);}
+  .consent .warn strong{color:var(--amber);}
+  .consent label{display:flex;gap:8px;align-items:flex-start;font-size:11.5px;line-height:1.45;color:var(--text);cursor:pointer;}
+  .consent input[type=checkbox]{margin:1px 0 0;width:15px;height:15px;flex:none;cursor:pointer;accent-color:var(--amber);}
+  .consent a{color:var(--amber);}
+  #fileInput:disabled{opacity:.4;cursor:not-allowed;}
+
+  .legal-bar{
+    flex-shrink:0;padding:10px 24px 12px;border-top:1px solid var(--border);
+    background:#121417;text-align:center;font-size:11px;line-height:1.6;color:var(--text-dim);
+  }
+  .legal-bar a{color:var(--text-dim);}
+  .legal-bar a:hover{color:var(--amber);}
 </style>
 </head>
 <body>
@@ -158,6 +175,13 @@
       </div>
     </div>
   </div>
+
+  <footer class="legal-bar">
+    Files processed per our
+    <a href="https://bim-press.com/privacy.html" target="_blank" rel="noopener">Privacy Policy</a> &middot;
+    <a href="https://bim-press.com/terms.html" target="_blank" rel="noopener">Terms of Service</a><br>
+    Always verify placed points against the contract documents before using them for field layout or construction.
+  </footer>
 
 </div>
 
@@ -262,11 +286,25 @@ function renderSidebar(){
   else if(state.step === 'place') el.innerHTML = placePanel();
 }
 
+// Consent for this browsing session. The sidebar re-renders via innerHTML, so
+// this lives outside state — "Start over" shouldn't ask again, a reload should.
+let consentGiven = false;
+
 function uploadPanel(){
   return `
     <h3>01 &middot; Upload</h3>
     <div class="hint">Drop in a site/floor plan PDF. This prototype renders the first page only.</div>
-    <input type="file" accept="application/pdf" id="fileInput" style="color:var(--text-dim); font-size:12px;">
+    <div class="consent">
+      <p>CoordX reads your PDF <strong>in this browser</strong>. The file is not uploaded to or stored on our servers.</p>
+      <p class="warn"><strong>Verify before you build.</strong> Coordinates produced here depend on the scale and calibration you set, and must be independently verified by a qualified professional before being used for actual field layout, staking or construction.</p>
+      <label for="consentCheck">
+        <input type="checkbox" id="consentCheck"${consentGiven ? ' checked' : ''}>
+        <span>I have the right to upload this file and I agree to the
+          <a href="https://bim-press.com/terms.html" target="_blank" rel="noopener">Terms of Service</a> and
+          <a href="https://bim-press.com/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+      </label>
+    </div>
+    <input type="file" accept="application/pdf" id="fileInput"${consentGiven ? '' : ' disabled'} style="color:var(--text-dim); font-size:12px;">
   `;
 }
 
@@ -479,7 +517,14 @@ function exportCsv(){
 
 // ---------- PDF handling ----------
 document.body.addEventListener('change', (e)=>{
+  if(e.target.id === 'consentCheck'){
+    consentGiven = e.target.checked;
+    // Re-render so the file input enables/disables, keeping the box as it is.
+    renderSidebar();
+    return;
+  }
   if(e.target.id === 'fileInput'){
+    if(!consentGiven) return;   // belt and braces: the input is disabled too
     const file = e.target.files[0];
     if(file) loadPdf(file);
   }
